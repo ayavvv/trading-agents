@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+results/
+memory/*.json
+!memory/bm25_search.py
+.env

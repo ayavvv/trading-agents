@@ -1,0 +1,4 @@
+yfinance>=1.2.0
+stockstats>=0.6.5
+rank-bm25>=0.2.2
+pandas>=2.0.0
