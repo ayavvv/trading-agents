@@ -3,7 +3,7 @@
   "max_debate_rounds": 1,
   "max_risk_discuss_rounds": 1,
   "analyst_model": "sonnet",
-  "deep_think_model": "sonnet",
+  "deep_think_model": "opus",
   "indicators": [
     "rsi_14", "macd", "macdh", "macds",
     "close_20_sma", "close_50_sma", "close_200_sma",

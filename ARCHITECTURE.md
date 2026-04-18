@@ -326,9 +326,9 @@ memory/
 ```
 用户输入: /deep-analysis TSLA
                 ↓
-Claude Code 读取 ~/.claude/commands/deep-analysis.md
+Claude Code 以仓库内 prompts/deep-analysis.md 为权威模板（home 命令文件仅作薄包装入口）
                 ↓
-按 prompt 指令依次执行 Phase 0-4
+按模板指令依次执行 Phase 0-5
   - Phase 1: 4 个 Agent 并行（一条消息 4 个 tool call）
   - Phase 4: 3 个 Agent 并行
   - 研究经理/投组经理: model="opus"
@@ -344,15 +344,17 @@ Claude Code 读取 ~/.claude/commands/deep-analysis.md
 ```
 run_analysis.sh LI
         ↓
-orchestrator.py
-  - Phase 1: ThreadPoolExecutor 并行 4 个 claude -p
-  - Phase 2-4: 顺序 claude -p 调用
+读取 prompts/deep-analysis.md 并替换 ticker
+        ↓
+claude -p 执行 Claude Code 原生多 agent 流程
+        ↓
+orchestrator.py prepare / persist
         ↓
 results/LI/date_decision.md
 ```
 
-**优势：** 可被 cron/OpenClaw 调度、结果自动存档为 JSON
-**限制：** 更慢（~15min）、风控辩论只能顺序执行
+**优势：** 可被 cron/OpenClaw 调度、结果自动存档为 JSON、与交互式 `/deep-analysis` 共用同一份仓库模板
+**限制：** 仍依赖 Claude Code CLI 可用，脚本入口本质上是对仓库模板的非交互式包装
 
 ### 如何选择
 
