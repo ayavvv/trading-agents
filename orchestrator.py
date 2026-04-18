@@ -205,11 +205,43 @@ def prepare_run(ticker: str, config_path: Optional[str] = None) -> Path:
     return manifest_path
 
 
+def validate_final_state(raw_state: Dict[str, Any]) -> None:
+    reports = raw_state.get("reports")
+    if not isinstance(reports, dict):
+        raise ValueError("final_state.reports 必须是对象")
+
+    required_report_keys = ("market", "sentiment", "news", "fundamentals")
+    for key in required_report_keys:
+        value = reports.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"final_state.reports.{key} 不能为空")
+
+    required_string_keys = ("analyst_summary", "investment_plan", "trade_proposal", "final_decision")
+    for key in required_string_keys:
+        value = raw_state.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"final_state.{key} 不能为空")
+
+    risk_history = raw_state.get("risk_history")
+    if not isinstance(risk_history, list) or not risk_history:
+        raise ValueError("final_state.risk_history 必须是非空数组")
+    if not all(isinstance(item, str) and item.strip() for item in risk_history):
+        raise ValueError("final_state.risk_history 只能包含非空字符串")
+
+    debate_history = raw_state.get("debate_history")
+    if not isinstance(debate_history, list) or not debate_history:
+        raise ValueError("final_state.debate_history 必须是非空数组")
+    if not all(isinstance(item, str) and item.strip() for item in debate_history):
+        raise ValueError("final_state.debate_history 只能包含非空字符串")
+
+
 def persist_results(manifest_path: str, state_json_path: str) -> Dict[str, str]:
     with open(manifest_path, "r", encoding="utf-8") as f:
         manifest = json.load(f)
     with open(state_json_path, "r", encoding="utf-8") as f:
         raw_state = json.load(f)
+
+    validate_final_state(raw_state)
 
     config = manifest.get("config", {})
     final_state = {
@@ -219,6 +251,7 @@ def persist_results(manifest_path: str, state_json_path: str) -> Dict[str, str]:
         "manifest_path": manifest["paths"]["manifest"],
         "config": config,
         "reports": raw_state.get("reports", {}),
+        "analyst_summary": raw_state.get("analyst_summary", ""),
         "debate_history": raw_state.get("debate_history", []),
         "investment_plan": raw_state.get("investment_plan", ""),
         "trade_proposal": raw_state.get("trade_proposal", ""),

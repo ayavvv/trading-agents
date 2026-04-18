@@ -30,7 +30,13 @@ cd ~/.openclaw/workspace/trading-agents && .venv/bin/python3 orchestrator.py pre
 - `manifest.paths.memories.judge`
 - `manifest.paths.memories.portfolio`
 
-4. 还要读取角色 prompt 文件，尽量沿用本地既有角色卡：
+4. 从 `manifest.config` 读取并严格遵循这些运行参数：
+- `analyst_model`：4 个分析师、多头研究员、空头研究员、交易员、风控 agent 默认使用该模型；若缺失则用 `sonnet`
+- `deep_think_model`：研究经理、投组经理默认使用该模型；若缺失则用 `opus`
+- `max_debate_rounds`：多空辩论轮数；若缺失则按 1 轮执行
+- `max_risk_discuss_rounds`：风控讨论轮数；若缺失则按 1 轮执行
+
+5. 还要读取角色 prompt 文件，尽量沿用本地既有角色卡：
 - `~/.openclaw/workspace/trading-agents/prompts/market_analyst.txt`
 - `~/.openclaw/workspace/trading-agents/prompts/sentiment_analyst.txt`
 - `~/.openclaw/workspace/trading-agents/prompts/news_analyst.txt`
@@ -48,6 +54,7 @@ cd ~/.openclaw/workspace/trading-agents && .venv/bin/python3 orchestrator.py pre
 
 用 **并行 Agent** 启动 4 个分析师。每个 agent：
 - 读取对应 prompt 文件和对应 input bundle
+- 模型优先使用 `manifest.config.analyst_model`；若缺失则用 `sonnet`
 - 严格按角色定位输出中文报告
 - 这是纯研究任务，只返回最终报告，不要写文件
 
@@ -67,50 +74,60 @@ cd ~/.openclaw/workspace/trading-agents && .venv/bin/python3 orchestrator.py pre
 
 ## Phase 2: 多空研究辩论（顺序）
 
-按顺序执行：
+按 `manifest.config.max_debate_rounds` 执行多空辩论；若缺失则按 1 轮执行。每一轮都按以下顺序：
 
 1. **多头研究员**
    - 使用 `bull_researcher.txt`
-   - 输入：分析师摘要 + `manifest.paths.memories.bull`
+   - 模型优先使用 `manifest.config.analyst_model`；若缺失则用 `sonnet`
+   - 输入：分析师摘要 + 历史多空辩论上下文（若有） + `manifest.paths.memories.bull`
    - 输出：鲜明的看多论证，引用数据，主动反驳潜在空头观点
 
 2. **空头研究员**
    - 使用 `bear_researcher.txt`
-   - 输入：分析师摘要 + 多头论点 + `manifest.paths.memories.bear`
+   - 模型优先使用 `manifest.config.analyst_model`；若缺失则用 `sonnet`
+   - 输入：分析师摘要 + 当前轮多头论点 + 历史多空辩论上下文（若有） + `manifest.paths.memories.bear`
    - 输出：逐条反驳多头，指出脆弱假设与过度乐观之处
+
+完成全部轮次后，再启动：
 
 3. **研究经理**
    - 使用 `research_manager.txt`
    - 模型：优先使用 `manifest.config.deep_think_model`；若缺失则用 `opus`
-   - 输入：分析师摘要 + 多头论点 + 空头论点 + `manifest.paths.memories.judge`
+   - 输入：分析师摘要 + 全部多头论点 + 全部空头论点 + `manifest.paths.memories.judge`
    - 输出：明确的 Buy / Sell / Hold 结论，以及具体投资计划（入场、仓位、止损、止盈、时间框架）
 
 ## Phase 3: 交易员提案（顺序）
 
 启动 **交易员** agent：
 - 使用 `trader.txt`
+- 模型优先使用 `manifest.config.analyst_model`；若缺失则用 `sonnet`
 - 输入：分析师摘要 + 研究经理投资计划 + 当前持仓 + `manifest.paths.memories.trader`
 - 输出：具体交易提案，含执行细节、仓位、止损止盈、风险回报比、触发条件
 - 末尾必须包含：`最终交易提案: BUY/HOLD/SELL`
 
-## Phase 4: 3 个风控 agent 并行 + 投组经理裁决
+## Phase 4: 风控讨论 + 投组经理裁决
+
+按 `manifest.config.max_risk_discuss_rounds` 执行风控讨论；若缺失则按 1 轮执行。每一轮都：
 
 1. 用 **并行 Agent** 同时启动：
    - 激进派 → `aggressive_debater.txt`
    - 保守派 → `conservative_debater.txt`
    - 中立派 → `neutral_debater.txt`
 
-   输入统一为：分析师摘要 + 研究经理投资计划 + 交易员提案 + 当前持仓。
+   输入统一为：分析师摘要 + 研究经理投资计划 + 交易员提案 + 当前持仓 + 历史风控观点（若有）。
 
    约束：
+   - 模型优先使用 `manifest.config.analyst_model`；若缺失则用 `sonnet`
    - 中文
    - 每个风控观点尽量控制在 500 字以内
    - 只返回最终观点，不写文件
 
-2. 然后启动 **投组经理**：
+完成全部轮次后，再启动：
+
+2. **投组经理**
    - 使用 `portfolio_manager.txt`
    - 模型：优先使用 `manifest.config.deep_think_model`；若缺失则用 `opus`
-   - 输入：分析师摘要 + 研究经理投资计划 + 交易员提案 + 三个风控观点 + `manifest.paths.memories.portfolio`
+   - 输入：分析师摘要 + 研究经理投资计划 + 交易员提案 + 全部风控观点 + `manifest.paths.memories.portfolio`
    - 输出格式必须包含：
      - **评级**：Buy / Overweight / Hold / Underweight / Sell
      - **执行摘要**：表格形式（仓位、止损、目标价、时间框架、强制退出条件）
@@ -118,7 +135,7 @@ cd ~/.openclaw/workspace/trading-agents && .venv/bin/python3 orchestrator.py pre
 
 ## Phase 5: 写结构化 state 并落盘
 
-整理出一个 JSON 对象，至少包含这些字段：
+整理出一个 JSON 对象，至少包含这些字段；不要省略空字段，也不要用 `null` 代替必填内容：
 
 ```json
 {
@@ -145,8 +162,9 @@ cd ~/.openclaw/workspace/trading-agents && .venv/bin/python3 orchestrator.py pre
 ```
 
 然后：
-1. 把 JSON 写到 `manifest.paths.scratch_state`
-2. 用 Bash 运行：
+1. 写入前自检：`reports.market`、`reports.sentiment`、`reports.news`、`reports.fundamentals`、`analyst_summary`、`investment_plan`、`trade_proposal`、`risk_history`、`final_decision` 都必须非空
+2. 把 JSON 写到 `manifest.paths.scratch_state`
+3. 用 Bash 运行：
 ```bash
 cd ~/.openclaw/workspace/trading-agents && .venv/bin/python3 orchestrator.py persist --manifest "<manifest_path>" --state-json "<manifest.paths.scratch_state>"
 ```

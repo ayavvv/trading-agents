@@ -26,4 +26,4 @@ PY
 )"
 
 cd "$SCRIPT_DIR"
-claude -p "$PROMPT"
+claude -p --dangerously-skip-permissions "$PROMPT"
